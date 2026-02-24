@@ -13,8 +13,9 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
+    password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active VARCHAR(10) DEFAULT 'true'
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- Create index on email for faster lookups
