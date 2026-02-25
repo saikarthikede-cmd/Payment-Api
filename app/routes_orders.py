@@ -1,15 +1,19 @@
+import logging
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+
+from app import services
 from app.auth import get_current_user
+from app.config import settings
 from app.db import get_db
 from app.models import User
 from app.schemas import OrderCreate, OrderResponse, OrderDetail
-from app.config import settings
-from app import services
-import uuid
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=OrderResponse, status_code=201)
@@ -42,16 +46,23 @@ def create_order(
     Do not suggest changes to error handling logic.
     """
     if order.customer_id != current_user.user_id:
+        logger.warning(
+            "Forbidden order create user_id=%s target_customer_id=%s",
+            current_user.user_id,
+            order.customer_id,
+        )
         raise HTTPException(status_code=403, detail="Forbidden")
 
     try:
         new_order = services.create_order(db, order)
         return OrderResponse(order_id=new_order.id, status=new_order.status)
     except ValueError as e:
+        logger.warning("Order creation validation failed customer_id=%s error=%s", order.customer_id, e)
         # Business logic validation errors (invalid data)
         # These should be returned immediately to client for correction
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.exception("Order creation failed customer_id=%s", order.customer_id)
         # Transient failures: database connection, constraint violations, etc.
         # Graceful degradation: queue for async processing
         if settings.enable_graceful_degradation:
@@ -76,6 +87,11 @@ def list_orders(
 ):
     """List all orders for a customer."""
     if customer_id != current_user.user_id:
+        logger.warning(
+            "Forbidden order list user_id=%s target_customer_id=%s",
+            current_user.user_id,
+            customer_id,
+        )
         raise HTTPException(status_code=403, detail="Forbidden")
     orders = services.get_orders_by_customer(db, customer_id)
     return orders

@@ -9,8 +9,7 @@ from sqlalchemy import (
     Text,
     Uuid,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 import uuid
 

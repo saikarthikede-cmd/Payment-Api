@@ -58,12 +58,13 @@ def test_health_and_root():
     assert root.status_code == 200
     assert root.json()["message"] == "Payment API is running"
 
+
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["status"] == "healthy"
 
 
-def test_auth_signup_signin_and_me():
+def test_auth_signup_signin_and_protected_access():
     signup = client.post("/auth/signup", json=signup_payload())
     assert signup.status_code == 201
     assert signup.json()["user_id"] == "CUST-001"
@@ -76,9 +77,21 @@ def test_auth_signup_signin_and_me():
     token = signin.json()["access_token"]
     assert token
 
-    me = client.get("/auth/me", headers=auth_headers(token))
-    assert me.status_code == 200
-    assert me.json()["email"] == "customer@example.com"
+    protected = client.get("/users/CUST-001", headers=auth_headers(token))
+    assert protected.status_code == 200
+    assert protected.json()["email"] == "customer@example.com"
+
+    unauthorized = client.get("/users/CUST-001")
+    assert unauthorized.status_code == 401
+
+
+def test_auth_invalid_signin():
+    client.post("/auth/signup", json=signup_payload())
+    bad_signin = client.post(
+        "/auth/signin",
+        json={"email": "customer@example.com", "password": "WrongPass123"},
+    )
+    assert bad_signin.status_code == 401
 
 
 def test_users_endpoints():
@@ -135,6 +148,13 @@ def test_orders_endpoints():
     assert listed.status_code == 200
     assert len(listed.json()) == 1
 
+    forbidden = client.get(
+        "/orders",
+        params={"customer_id": "CUST-999"},
+        headers=auth_headers(token),
+    )
+    assert forbidden.status_code == 403
+
 
 def test_wallet_endpoints():
     client.post("/auth/signup", json=signup_payload())
@@ -163,3 +183,6 @@ def test_wallet_endpoints():
     wallet = client.get("/wallet/CUST-001", headers=auth_headers(token))
     assert wallet.status_code == 200
     assert wallet.json()["balance"] == 750.0
+
+    forbidden = client.get("/wallet/CUST-999", headers=auth_headers(token))
+    assert forbidden.status_code == 403

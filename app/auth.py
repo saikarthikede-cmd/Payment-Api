@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
@@ -12,6 +13,7 @@ from app.db import get_db
 from app.models import User
 
 
+logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/signin")
 
@@ -50,6 +52,7 @@ def decode_access_token(token: str) -> str:
             )
         return str(subject)
     except JWTError as exc:
+        logger.warning("Failed to decode JWT token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",

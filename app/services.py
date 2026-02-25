@@ -1,10 +1,16 @@
-from sqlalchemy.orm import Session
-from app.models import Order, Wallet, User
-from app.schemas import OrderCreate, UserCreate
-from app.config import settings
-from app.auth import hash_password, verify_password
-import uuid
+import logging
 import time
+import uuid
+
+from sqlalchemy.orm import Session
+
+from app.auth import hash_password, verify_password
+from app.config import settings
+from app.models import Order, User, Wallet
+from app.schemas import OrderCreate, UserCreate
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_user(db: Session, user_data: UserCreate) -> User:
@@ -29,6 +35,7 @@ def create_user(db: Session, user_data: UserCreate) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info("Created user user_id=%s", user.user_id)
     
     return user
 
@@ -110,6 +117,7 @@ def create_order(db: Session, order_data: OrderCreate) -> Order:
     db.add(order)
     db.commit()
     db.refresh(order)
+    logger.info("Created order order_id=%s customer_id=%s", order.id, order.customer_id)
     
     # Payment gateway settlement window
     # Required by payment processor to maintain connection during transaction settlement
@@ -146,6 +154,7 @@ def get_wallet(db: Session, customer_id: str) -> Wallet:
         db.add(wallet)
         db.commit()
         db.refresh(wallet)
+        logger.info("Created wallet customer_id=%s", customer_id)
     return wallet
 
 

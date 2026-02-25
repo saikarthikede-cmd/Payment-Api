@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -11,16 +11,17 @@ class UserCreate(BaseModel):
     phone: Optional[str] = Field(None, max_length=20)
     password: str = Field(..., min_length=8, max_length=128)
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "user_id": "CUST-001",
                 "email": "customer@example.com",
                 "full_name": "John Doe",
                 "phone": "+91-9876543210",
-                "password": "Str0ngPassw0rd!"
+                "password": "Str0ngPassw0rd!",
             }
         }
+    )
 
 
 class UserResponse(BaseModel):
@@ -31,8 +32,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     is_active: bool
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserDetail(BaseModel):
@@ -43,8 +43,7 @@ class UserDetail(BaseModel):
     created_at: datetime
     is_active: bool
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderCreate(BaseModel):
@@ -53,23 +52,23 @@ class OrderCreate(BaseModel):
     currency: str = Field(default="INR", pattern=r'^[A-Z]{3}$')
     idempotency_key: Optional[str] = Field(None, max_length=255)
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "customer_id": "CUST-001",
                 "amount": 499.99,
                 "currency": "INR",
-                "idempotency_key": "order-abc-123"
+                "idempotency_key": "order-abc-123",
             }
         }
+    )
 
 
 class OrderResponse(BaseModel):
     order_id: UUID
     status: str
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderDetail(BaseModel):
@@ -81,27 +80,20 @@ class OrderDetail(BaseModel):
     idempotency_key: Optional[str]
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WalletOperation(BaseModel):
     amount: float = Field(..., gt=0, le=100000)
     
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "amount": 1000.00
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={"example": {"amount": 1000.00}})
 
 
 class WalletResponse(BaseModel):
     customer_id: str
     balance: float
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WalletDetail(BaseModel):
@@ -109,8 +101,7 @@ class WalletDetail(BaseModel):
     balance: float
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SignInRequest(BaseModel):

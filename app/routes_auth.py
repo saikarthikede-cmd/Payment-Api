@@ -1,25 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app import services
-from app.auth import create_access_token, get_current_user
+from app.auth import create_access_token
 from app.db import get_db
-from app.models import User
 from app.schemas import SignInRequest, TokenResponse, UserCreate, UserDetail
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/signup", response_model=UserDetail, status_code=201)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     try:
-        return services.create_user(db, user)
+        created = services.create_user(db, user)
+        logger.info("User signup success user_id=%s", created.user_id)
+        return created
     except ValueError as exc:
+        logger.warning("User signup validation failed user_id=%s error=%s", user.user_id, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SQLAlchemyError as exc:
         db.rollback()
+        logger.exception("Database error during signup user_id=%s", user.user_id)
         raise HTTPException(
             status_code=500,
             detail="Database error during signup. Recheck database schema.",
@@ -27,22 +34,38 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/signin", response_model=TokenResponse)
-def signin(credentials: SignInRequest, db: Session = Depends(get_db)):
+async def signin(request: Request, db: Session = Depends(get_db)):
+    email = ""
+    password = ""
+    content_type = request.headers.get("content-type", "")
+
     try:
-        user = services.authenticate_user(db, credentials.email, credentials.password)
+        if content_type.startswith("application/json"):
+            payload = SignInRequest.model_validate(await request.json())
+            email = payload.email
+            password = payload.password
+        else:
+            # Swagger OAuth2 Authorize sends x-www-form-urlencoded with username/password.
+            form = await request.form()
+            email = str(form.get("username", ""))
+            password = str(form.get("password", ""))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    try:
+        user = services.authenticate_user(db, email, password)
         if not user:
+            logger.warning("Signin failed for email=%s", email)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
             )
+        logger.info("Signin success user_id=%s", user.user_id)
         return TokenResponse(access_token=create_access_token(subject=user.user_id))
     except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Database error during signin email=%s", email)
         raise HTTPException(
             status_code=500,
             detail="Database error during signin. Recheck database schema.",
         ) from exc
-
-
-@router.get("/me", response_model=UserDetail)
-def me(current_user: User = Depends(get_current_user)):
-    return current_user
