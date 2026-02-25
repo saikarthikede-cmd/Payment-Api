@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from app import services
 from app.auth import get_current_user
@@ -23,7 +24,7 @@ def _wallet_response(customer_id: str, balance: Decimal | float | int | str | No
 
 
 @router.post("/{customer_id}/credit", response_model=WalletResponse)
-def credit_wallet(
+async def credit_wallet(
     customer_id: str,
     operation: WalletOperation,
     db: Session = Depends(get_db),
@@ -38,7 +39,7 @@ def credit_wallet(
         )
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        wallet = services.credit_wallet(db, customer_id, operation.amount)
+        wallet = await run_in_threadpool(services.credit_wallet, db, customer_id, operation.amount)
         return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet credit validation failed customer_id=%s error=%s", customer_id, e)
@@ -46,7 +47,7 @@ def credit_wallet(
 
 
 @router.post("/{customer_id}/debit", response_model=WalletResponse)
-def debit_wallet(
+async def debit_wallet(
     customer_id: str,
     operation: WalletOperation,
     db: Session = Depends(get_db),
@@ -61,7 +62,7 @@ def debit_wallet(
         )
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        wallet = services.debit_wallet(db, customer_id, operation.amount)
+        wallet = await run_in_threadpool(services.debit_wallet, db, customer_id, operation.amount)
         return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet debit validation failed customer_id=%s error=%s", customer_id, e)
@@ -69,7 +70,7 @@ def debit_wallet(
 
 
 @router.get("/{customer_id}", response_model=WalletResponse)
-def get_wallet(
+async def get_wallet(
     customer_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -83,7 +84,7 @@ def get_wallet(
         )
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        wallet = services.get_wallet(db, customer_id)
+        wallet = await run_in_threadpool(services.get_wallet, db, customer_id)
         return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet fetch validation failed customer_id=%s error=%s", customer_id, e)

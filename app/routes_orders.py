@@ -2,6 +2,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=OrderResponse, status_code=201)
-def create_order(
+async def create_order(
     order: OrderCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -32,7 +33,7 @@ def create_order(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     try:
-        new_order = services.create_order(db, order)
+        new_order = await run_in_threadpool(services.create_order, db, order)
         return OrderResponse(order_id=new_order.id, status=new_order.status)
     except ValueError as e:
         logger.warning("Order creation validation failed customer_id=%s error=%s", order.customer_id, e)
@@ -58,7 +59,7 @@ def create_order(
 
 
 @router.get("", response_model=List[OrderDetail])
-def list_orders(
+async def list_orders(
     customer_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -71,5 +72,5 @@ def list_orders(
             customer_id,
         )
         raise HTTPException(status_code=403, detail="Forbidden")
-    orders = services.get_orders_by_customer(db, customer_id)
+    orders = await run_in_threadpool(services.get_orders_by_customer, db, customer_id)
     return orders

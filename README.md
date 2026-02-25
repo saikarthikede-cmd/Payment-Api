@@ -1,184 +1,170 @@
 # Payment API
 
-A FastAPI-based payment processing system with user management, order processing, and wallet functionality.
+FastAPI payment service with JWT authentication, users, orders, and wallet operations.
 
-## Quick Links
+## What Was Updated
 
-- 📖 [Complete Deployment Guide](DEPLOYMENT.md) - Step-by-step local setup instructions
-- 📚 [Technical Documentation](DOCUMENTATION.md) - Architecture, flows, and development guide
-- 🔗 [API Documentation](http://localhost:8000/docs) - Interactive Swagger UI (after starting server)
+- Added production-style JWT auth flow:
+  - `POST /auth/signup`
+  - `POST /auth/signin`
+- Signin supports both:
+  - JSON body (`email`, `password`) for API clients
+  - OAuth form (`username`, `password`) for Swagger Authorize
+- Added structured logging:
+  - App startup/shutdown logs
+  - Request logs with request ID
+  - Route/service success and failure logs
+- Added stronger DB behavior:
+  - User uniqueness checks (`user_id`, `email`)
+  - Passwords stored as `password_hash` only (bcrypt)
+  - Wallet operations use row-level lock patterns
+- Converted scenario and seed scripts to async (`httpx` + `asyncio`)
+- Added graceful script behavior when API server is not running
+- Test suite validated: `6 passed`
 
-## Prerequisites
+## Tech Stack
 
-- Python 3.11+
-- Docker
-- PostgreSQL (via Docker)
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Pydantic v2
+- python-jose (JWT)
+- passlib + bcrypt
 
-## Quick Start
+## Setup
 
-### 1. Start PostgreSQL
+## 1. Create virtual environment
 
-```bash
-docker run --name app_pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=appdb -p 5432:5432 -d postgres:16
-```
-
-### 2. Install Dependencies
-
-```bash
+```powershell
 python -m venv .venv
-source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 3. Run the Application
+## 2. Configure environment
 
-```bash
-uvicorn app.main:app --reload --port 8000
+Create `.env` in project root with:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:<your_password>@localhost:5432/appdb
+JWT_SECRET_KEY=<your_long_random_secret>
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+APP_ENV=development
+LOG_LEVEL=INFO
 ```
 
-The API will be available at `http://localhost:8000`
+## 3. Start API
 
-### 4. Seed Sample Data
+```powershell
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+```
 
-```bash
-# Seed multiple users with wallets and orders
+- Swagger: `http://127.0.0.1:8000/docs`
+- Health: `http://127.0.0.1:8000/health`
+
+## Authentication Flow
+
+1. Signup user:
+
+```http
+POST /auth/signup
+```
+
+2. Signin and get token:
+
+```http
+POST /auth/signin
+```
+
+3. Use token in protected APIs:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Protected endpoints:
+- `/users/*`
+- `/orders/*`
+- `/wallet/*`
+
+## API Groups
+
+- `auth`: signup/signin
+- `users`: get current user data, list current user view
+- `orders`: create/list orders for authenticated customer
+- `wallet`: credit/debit/get wallet for authenticated customer
+
+## Async Scripts
+
+Both scripts are async now:
+
+- `scripts/seed_data.py`
+- `scripts/run_scenarios.py`
+
+They use `httpx.AsyncClient` and `asyncio` to improve I/O throughput for API calls.
+
+### Run seed script
+
+```powershell
 python scripts/seed_data.py --all
+```
 
-# Or seed a single user
+or
+
+```powershell
 python scripts/seed_data.py CUST-001
 ```
 
-## API Endpoints
+### Run scenarios
 
-### Users
-
-**Create User**
-```bash
-curl -X POST http://localhost:8000/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "CUST-001",
-    "email": "customer@example.com",
-    "full_name": "John Doe",
-    "phone": "+91-9876543210"
-  }'
-```
-
-**Get User**
-```bash
-curl http://localhost:8000/users/CUST-001
-```
-
-**List Users**
-```bash
-curl http://localhost:8000/users
-```
-
-### Orders
-
-**Create Order**
-```bash
-curl -X POST http://localhost:8000/orders \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_id": "CUST-001",
-    "amount": 499.99,
-    "currency": "INR",
-    "idempotency_key": "order-123"
-  }'
-```
-
-**List Orders**
-```bash
-curl "http://localhost:8000/orders?customer_id=CUST-001"
-```
-
-### Wallet
-
-**Credit Wallet**
-```bash
-curl -X POST http://localhost:8000/wallet/CUST-001/credit \
-  -H "Content-Type: application/json" \
-  -d '{"amount": 1000}'
-```
-
-**Debit Wallet**
-```bash
-curl -X POST http://localhost:8000/wallet/CUST-001/debit \
-  -H "Content-Type: application/json" \
-  -d '{"amount": 200}'
-```
-
-**Get Wallet Balance**
-```bash
-curl http://localhost:8000/wallet/CUST-001
-```
-
-## Testing Scenarios
-
-Run various test scenarios to validate the API:
-
-```bash
-# Run all scenarios with seeding
-python scripts/run_scenarios.py --scenario all --seed
-
-# Run specific scenario
+```powershell
 python scripts/run_scenarios.py --scenario orders_retry
 python scripts/run_scenarios.py --scenario wallet_concurrency
 python scripts/run_scenarios.py --scenario false_success
-
-# Repeat scenario multiple times
-python scripts/run_scenarios.py --scenario wallet_concurrency --repeat 5
+python scripts/run_scenarios.py --scenario mixed
 ```
 
-## Database Management
+If API is not running, scripts print a clear start-server message instead of crashing.
 
-### Using SQL Files
+## Tests
 
-**Initialize schema:**
-```bash
-docker exec -i app_pg psql -U postgres -d appdb < sql/schema.sql
+```powershell
+.\.venv\Scripts\python -m pytest -q
 ```
 
-**Load seed data:**
-```bash
-docker exec -i app_pg psql -U postgres -d appdb < sql/seed_data.sql
-```
-
-**Connect to database:**
-```bash
-docker exec -it app_pg psql -U postgres -d appdb
-```
+Current status:
+- `6 passed`
 
 ## Project Structure
 
-```
+```text
 payment-api/
-├── app/
-│   ├── __init__.py
-│   ├── main.py           # FastAPI application
-│   ├── config.py         # Configuration
-│   ├── db.py             # Database setup
-│   ├── models.py         # SQLAlchemy models
-│   ├── schemas.py        # Pydantic schemas
-│   ├── services.py       # Business logic
-│   ├── routes_orders.py  # Order endpoints
-│   ├── routes_wallet.py  # Wallet endpoints
-│   └── auth.py           # Authentication utilities
-├── scripts/
-│   ├── run_scenarios.py  # Test scenarios
-│   └── seed_data.py      # Data seeding
-├── requirements.txt
-├── .gitignore
-└── README.md
+  app/
+    auth.py
+    config.py
+    db.py
+    logging_config.py
+    main.py
+    models.py
+    routes_auth.py
+    routes_orders.py
+    routes_users.py
+    routes_wallet.py
+    schemas.py
+    services.py
+  scripts/
+    run_scenarios.py
+    seed_data.py
+  sql/
+    schema.sql
+    seed_data.sql
+  tests/
+    test_api.py
 ```
 
-## Development
+## Notes for Explanation
 
-The application uses:
-- FastAPI for the web framework
-- SQLAlchemy 2.x for ORM
-- PostgreSQL for the database
-- Pydantic v2 for data validation
+If asked why async scripts were used:
 
-Database schema is automatically initialized on application startup.
+"These scripts are network I/O heavy. Async lets multiple HTTP calls run concurrently with lower overhead than threads, so scenario execution is faster and more scalable."
