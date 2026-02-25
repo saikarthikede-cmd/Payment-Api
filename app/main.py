@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -46,24 +47,32 @@ app.include_router(wallet_router)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    request_id = str(uuid.uuid4())[:8]
+    request.state.request_id = request_id
+    client = request.client.host if request.client else "unknown"
     started = time.perf_counter()
     try:
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         logger.info(
-            "request method=%s path=%s status=%s duration_ms=%s",
+            "[%s] request method=%s path=%s client=%s status=%s duration_ms=%s",
+            request_id,
             request.method,
             request.url.path,
+            client,
             response.status_code,
             duration_ms,
         )
+        response.headers["X-Request-ID"] = request_id
         return response
     except Exception:
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         logger.exception(
-            "request method=%s path=%s status=500 duration_ms=%s",
+            "[%s] request method=%s path=%s client=%s status=500 duration_ms=%s",
+            request_id,
             request.method,
             request.url.path,
+            client,
             duration_ms,
         )
         raise

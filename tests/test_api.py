@@ -95,7 +95,7 @@ def test_auth_invalid_signin():
 
 
 def test_users_endpoints():
-    created = client.post("/users", json=signup_payload())
+    created = client.post("/auth/signup", json=signup_payload())
     assert created.status_code == 201
 
     signin = client.post(

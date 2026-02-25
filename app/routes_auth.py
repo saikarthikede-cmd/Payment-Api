@@ -1,4 +1,5 @@
 import logging
+from json import JSONDecodeError
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
@@ -66,6 +67,8 @@ async def signin(
             password = payload.password
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        except JSONDecodeError as exc:
+            raise HTTPException(status_code=422, detail="Malformed JSON body") from exc
     else:
         # Swagger OAuth2 Authorize sends x-www-form-urlencoded with username/password.
         form = await request.form()

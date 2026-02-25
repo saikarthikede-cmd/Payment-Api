@@ -37,7 +37,31 @@ class ScenarioRunner:
             json={"email": self.email, "password": self.password},
         )
         if signin.status_code != 200:
-            raise RuntimeError(f"Failed to sign in: {signin.status_code} {signin.text}")
+            # Existing seeded users may have unknown passwords; fallback to a fresh customer ID.
+            suffix = int(time.time())
+            self.customer_id = f"CUST-{suffix}"
+            self.email = f"{self.customer_id.lower()}@example.com"
+            retry_signup = requests.post(
+                f"{self.base_url}/auth/signup",
+                json={
+                    "user_id": self.customer_id,
+                    "email": self.email,
+                    "full_name": f"Test User {self.customer_id}",
+                    "phone": "+91-9876543210",
+                    "password": self.password,
+                },
+            )
+            if retry_signup.status_code != 201:
+                raise RuntimeError(
+                    f"Failed to sign in and failed to create fallback user: "
+                    f"{retry_signup.status_code} {retry_signup.text}"
+                )
+            signin = requests.post(
+                f"{self.base_url}/auth/signin",
+                json={"email": self.email, "password": self.password},
+            )
+            if signin.status_code != 200:
+                raise RuntimeError(f"Failed to sign in: {signin.status_code} {signin.text}")
         self.token = signin.json()["access_token"]
     
     def ensure_user(self):
@@ -73,6 +97,7 @@ class ScenarioRunner:
     def orders_retry(self):
         """Scenario: Order creation with timeout and retry."""
         print("\n=== Running orders_retry scenario ===")
+        self.ensure_auth()
         
         idempotency_key = f"retry-test-{int(time.time())}"
         order_payload = {

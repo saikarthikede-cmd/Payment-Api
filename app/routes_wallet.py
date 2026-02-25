@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -10,6 +11,15 @@ from app.schemas import WalletOperation, WalletResponse
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 logger = logging.getLogger(__name__)
+
+
+def _wallet_response(customer_id: str, balance: Decimal | float | int | str | None) -> WalletResponse:
+    """Normalize wallet balance for API response."""
+    try:
+        normalized = float(Decimal(str(balance if balance is not None else 0)))
+    except (InvalidOperation, ValueError):
+        normalized = 0.0
+    return WalletResponse(customer_id=customer_id, balance=normalized)
 
 
 @router.post("/{customer_id}/credit", response_model=WalletResponse)
@@ -29,7 +39,7 @@ def credit_wallet(
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         wallet = services.credit_wallet(db, customer_id, operation.amount)
-        return WalletResponse(customer_id=str(wallet.customer_id), balance=float(wallet.balance))
+        return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet credit validation failed customer_id=%s error=%s", customer_id, e)
         raise HTTPException(status_code=400, detail=str(e))
@@ -52,7 +62,7 @@ def debit_wallet(
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         wallet = services.debit_wallet(db, customer_id, operation.amount)
-        return WalletResponse(customer_id=str(wallet.customer_id), balance=float(wallet.balance))
+        return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet debit validation failed customer_id=%s error=%s", customer_id, e)
         raise HTTPException(status_code=400, detail=str(e))
@@ -74,7 +84,7 @@ def get_wallet(
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         wallet = services.get_wallet(db, customer_id)
-        return WalletResponse(customer_id=str(wallet.customer_id), balance=float(wallet.balance))
+        return _wallet_response(str(wallet.customer_id), wallet.balance)
     except ValueError as e:
         logger.warning("Wallet fetch validation failed customer_id=%s error=%s", customer_id, e)
         raise HTTPException(status_code=400, detail=str(e))
