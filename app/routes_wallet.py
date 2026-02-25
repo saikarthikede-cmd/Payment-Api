@@ -74,7 +74,7 @@ def get_wallet(
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         wallet = services.get_wallet(db, customer_id)
-        return WalletResponse(customer_id=str(wallet.customer_id), balance=float(wallet.balance)) # type: ignore
+        return WalletResponse(customer_id=str(wallet.customer_id), balance=float(wallet.balance))
     except ValueError as e:
         logger.warning("Wallet fetch validation failed customer_id=%s error=%s", customer_id, e)
         raise HTTPException(status_code=400, detail=str(e))

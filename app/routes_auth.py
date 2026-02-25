@@ -33,24 +33,47 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         ) from exc
 
 
-@router.post("/signin", response_model=TokenResponse)
-async def signin(request: Request, db: Session = Depends(get_db)):
+@router.post(
+    "/signin",
+    response_model=TokenResponse,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": SignInRequest.model_json_schema(),
+                    "example": {
+                        "email": "customer@example.com",
+                        "password": "Str0ngPassw0rd!",
+                    },
+                }
+            },
+        }
+    },
+)
+async def signin(
+    request: Request,
+    db: Session = Depends(get_db),
+):
     email = ""
     password = ""
-    content_type = request.headers.get("content-type", "")
 
-    try:
-        if content_type.startswith("application/json"):
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("application/json"):
+        try:
             payload = SignInRequest.model_validate(await request.json())
             email = payload.email
             password = payload.password
-        else:
-            # Swagger OAuth2 Authorize sends x-www-form-urlencoded with username/password.
-            form = await request.form()
-            email = str(form.get("username", ""))
-            password = str(form.get("password", ""))
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    else:
+        # Swagger OAuth2 Authorize sends x-www-form-urlencoded with username/password.
+        form = await request.form()
+        email = str(form.get("username", ""))
+        password = str(form.get("password", ""))
+
+    if not email or not password:
+        raise HTTPException(status_code=422, detail="Email/username and password are required")
 
     try:
         user = services.authenticate_user(db, email, password)
@@ -61,7 +84,7 @@ async def signin(request: Request, db: Session = Depends(get_db)):
                 detail="Invalid email or password",
             )
         logger.info("Signin success user_id=%s", user.user_id)
-        return TokenResponse(access_token=create_access_token(subject=user.user_id))
+        return TokenResponse(access_token=create_access_token(subject=str(user.user_id)))
     except SQLAlchemyError as exc:
         db.rollback()
         logger.exception("Database error during signin email=%s", email)
